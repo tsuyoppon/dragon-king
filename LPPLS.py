@@ -7,7 +7,7 @@ from datetime import datetime as dt
 
 if __name__ == '__main__':
     # データをCSVから読み込む（ファイルパスを適宜修正）
-    file_path = 'nikkei_data.csv'
+    file_path = 'nikkei_data2_corrected.csv'
     data = pd.read_csv(file_path)
 
     # 日付列をdatetime型に変換
@@ -46,3 +46,5 @@ if __name__ == '__main__':
     lppls_model.plot_confidence_indicators(res)
     plt.show()
     
+
+# %%
