@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime as dt
 
 # データをCSVから読み込む（ファイルパスを適宜修正）
-file_path = '/path/to/nikkei_data.csv'
+file_path = 'nikkei_data.csv'
 data = pd.read_csv(file_path)
 
 # 日付列をdatetime型に変換
