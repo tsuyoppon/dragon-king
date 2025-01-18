@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load the uploaded CSV file
-file_path = 'S&P500.csv'
+file_path = 'Nasdaq.csv'
 data = pd.read_csv(file_path)
 
 # Display the first few rows and data types of each column
@@ -36,7 +36,7 @@ corrected_data_info = {
 corrected_data_info
 
 # Save the corrected data to a new CSV file
-corrected_file_path = 'S&P500_corrected.csv'
+corrected_file_path = 'Nasdaq_corrected.csv'
 data.to_csv(corrected_file_path, index=False)
 corrected_file_path
 
