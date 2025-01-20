@@ -69,5 +69,4 @@ if __name__ == '__main__':
         lppls_model.plot_confidence_indicators(res)
         plt.show()
     
-
 # %%
