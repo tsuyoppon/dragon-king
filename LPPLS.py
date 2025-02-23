@@ -4,33 +4,24 @@ from lppls import lppls
 import numpy as np
 import pandas as pd
 from datetime import datetime as dt
+from yahooquery import Ticker
 
 if __name__ == '__main__':
-    # データをCSVから読み込む（ファイルパスを適宜修正）
-    file_path = input("CSVファイルのパスを入力してください: ")
-    data = pd.read_csv(file_path)
+    # ティッカーシンボルをユーザーから入力
+    ticker_symbol = input("解析対象のティッカーシンボルを入力してください: ")
+    start_date_str = input("解析開始日(YYYY-MM-DD)を入力してください: ")
+    end_date_str = input("解析終了日(YYYY-MM-DD)を入力してください: ")
+
+    data = Ticker(ticker_symbol).history(start=start_date_str, end=end_date_str)
+    data.reset_index(inplace=True)
+    data.rename(columns={"date": "Date", "adjclose": "Adj Close"}, inplace=True)
 
     # 日付列をdatetime型に変換
     data['Date'] = pd.to_datetime(data['Date'], format='%Y-%m-%d')
 
-    # 解析開始日と終了日をユーザーから入力
-    start_date_str = input("解析開始日(YYYY-MM-DD)を入力してください: ")
-    end_date_str = input("解析終了日(YYYY-MM-DD)を入力してください: ")
-    start_date = pd.to_datetime(start_date_str, format='%Y-%m-%d', errors='coerce')
-    end_date = pd.to_datetime(end_date_str, format='%Y-%m-%d', errors='coerce')
-
     data = data.sort_values('Date')  # 日付順にソート
 
-    # 開始日・終了日に近い日付を探索
-    closest_start = data[data['Date'] >= start_date]['Date'].min()
-    closest_end = data[data['Date'] <= end_date]['Date'].max()
-
-    # 取得できない場合の簡易処理（データが範囲外ならスキップ／全体解析など）
-    if pd.isnull(closest_start) or pd.isnull(closest_end):
-        print("指定した期間に該当するデータがありません。全期間で解析を実行します。")
-        subset_data = data
-    else:
-        subset_data = data[(data['Date'] >= closest_start) & (data['Date'] <= closest_end)]
+    subset_data = data
 
     # 日付をordinal形式（数値）に変換
     time = [pd.Timestamp.toordinal(date) for date in subset_data['Date']]
