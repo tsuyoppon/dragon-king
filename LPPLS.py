@@ -16,8 +16,8 @@ if __name__ == '__main__':
     data.reset_index(inplace=True)
     data.rename(columns={"date": "Date", "adjclose": "Adj Close"}, inplace=True)
 
-    # 日付列をdatetime型に変換
-    data['Date'] = pd.to_datetime(data['Date'], format='%Y-%m-%d')
+    # タイムゾーン情報を削除
+    data['Date'] = pd.to_datetime(data['Date']).dt.tz_localize(None)
 
     data = data.sort_values('Date')  # 日付順にソート
 
