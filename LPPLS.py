@@ -5,6 +5,10 @@ import numpy as np
 import pandas as pd
 from datetime import datetime as dt
 from yahooquery import Ticker
+import matplotlib.pyplot as plt
+import matplotlib
+# 日本語フォント設定
+matplotlib.rcParams['font.family'] = ['DejaVu Sans', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', 'Takao', 'IPAexGothic', 'IPAPGothic', 'VL PGothic', 'Noto Sans CJK JP']
 
 if __name__ == '__main__':
     # ティッカーシンボルをユーザーから入力
@@ -121,7 +125,6 @@ if __name__ == '__main__':
         print("="*60)
         
         # フィット結果をプロット
-        import matplotlib.pyplot as plt # プロット用ライブラリ
         print("\nフィット結果をプロット中...")
         plt.figure(figsize=(12, 8))
         lppls_model.plot_fit()
