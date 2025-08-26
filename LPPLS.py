@@ -3,7 +3,7 @@
 from lppls import lppls
 import numpy as np
 import pandas as pd
-from datetime import datetime as dt
+from datetime import datetime as dt, datetime, timedelta
 from yahooquery import Ticker
 import matplotlib.pyplot as plt
 import matplotlib
@@ -39,8 +39,76 @@ if __name__ == '__main__':
     else:
         ticker_symbol = ticker_input.upper()
     
-    start_date_str = input("解析開始日(YYYY-MM-DD)を入力してください: ")
-    end_date_str = input("解析終了日(YYYY-MM-DD)を入力してください: ")
+    # 期間入力方式の選択
+    print("\n" + "-" * 60)
+    print("分析期間の入力方式を選択してください:")
+    print("1. 開始日と終了日を両方指定 (現行方式)")
+    print("2. 終了日から何年前までかを指定")
+    print("-" * 60)
+    
+    while True:
+        input_method = input("入力方式を選択 (1 または 2): ").strip()
+        if input_method in ['1', '2']:
+            break
+        print("❌ 1 または 2 を入力してください")
+    
+    if input_method == '1':
+        # 現行方式: 開始日と終了日を両方入力
+        start_date_str = input("解析開始日(YYYY-MM-DD)を入力してください: ")
+        end_date_str = input("解析終了日(YYYY-MM-DD)を入力してください: ")
+    else:
+        # 新方式: 終了日から何年前まで
+        end_date_str = input("解析終了日(YYYY-MM-DD)を入力してください: ")
+        
+        print("\n分析期間を選択してください:")
+        print("1. 1年前まで")
+        print("2. 2年前まで") 
+        print("3. 3年前まで")
+        print("4. 5年前まで")
+        print("5. 10年前まで")
+        print("6. カスタム期間")
+        
+        while True:
+            period_choice = input("期間を選択 (1-6): ").strip()
+            if period_choice in ['1', '2', '3', '4', '5', '6']:
+                break
+            print("❌ 1-6 の数字を入力してください")
+        
+        # 終了日をパース
+        try:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+        except ValueError:
+            print("❌ 日付形式が正しくありません。YYYY-MM-DD形式で入力してください。")
+            exit(1)
+        
+        # 期間に応じて開始日を計算
+        if period_choice == '1':
+            years_back = 1
+        elif period_choice == '2':
+            years_back = 2
+        elif period_choice == '3':
+            years_back = 3
+        elif period_choice == '4':
+            years_back = 5
+        elif period_choice == '5':
+            years_back = 10
+        else:  # カスタム期間
+            while True:
+                try:
+                    years_back = float(input("何年前まで分析しますか? (小数点可): "))
+                    if years_back > 0:
+                        break
+                    else:
+                        print("❌ 正の数値を入力してください")
+                except ValueError:
+                    print("❌ 数値を入力してください")
+        
+        # 開始日を計算
+        days_back = int(years_back * 365.25)  # うるう年を考慮
+        start_date = end_date - timedelta(days=days_back)
+        start_date_str = start_date.strftime('%Y-%m-%d')
+        
+        print(f"✓ 計算された分析期間: {start_date_str} ～ {end_date_str} ({years_back}年間)")
 
     print("\n" + "="*60)
     print(f"Dragon King - LPPLS分析")
@@ -49,7 +117,10 @@ if __name__ == '__main__':
         print(f"対象銘柄: {ticker_symbol} (入力: {ticker_input})")
     else:
         print(f"対象銘柄: {ticker_symbol}")
-    print(f"分析期間: {start_date_str} ～ {end_date_str}")
+    if input_method == '1':
+        print(f"分析期間: {start_date_str} ～ {end_date_str} (手動指定)")
+    else:
+        print(f"分析期間: {start_date_str} ～ {end_date_str} ({years_back}年間)")
     print("="*60)
     print("データ取得中...")
 
@@ -108,6 +179,10 @@ if __name__ == '__main__':
             print(f"対象銘柄: {ticker_symbol} (入力: {ticker_input})")
         else:
             print(f"対象銘柄: {ticker_symbol}")
+        if input_method == '1':
+            print(f"指定期間: {start_date_str} ～ {end_date_str} (手動指定)")
+        else:
+            print(f"指定期間: {start_date_str} ～ {end_date_str} ({years_back}年間)")
         print(f"分析期間: {actual_start} ～ {actual_end}")
         print(f"データ数: {data_points:,} 件")
         print("-"*60)
