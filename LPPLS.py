@@ -11,15 +11,44 @@ import matplotlib
 matplotlib.rcParams['font.family'] = ['DejaVu Sans', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', 'Takao', 'IPAexGothic', 'IPAPGothic', 'VL PGothic', 'Noto Sans CJK JP']
 
 if __name__ == '__main__':
+    # ティッカーシンボル省略入力の定義
+    ticker_shortcuts = {
+        'nikkei': '^N225',
+        'sp500': '^GSPC', 
+        'nas': '^IXIC'
+    }
+    
     # ティッカーシンボルをユーザーから入力
-    ticker_symbol = input("解析対象のティッカーシンボルを入力してください: ")
+    print("=" * 60)
+    print("Dragon King - LPPLS分析ツール")
+    print("=" * 60)
+    print("【省略入力対応】")
+    print("  Nikkei → ^N225 (日経平均)")
+    print("  SP500  → ^GSPC (S&P500)")
+    print("  Nas    → ^IXIC (NASDAQ)")
+    print("【その他】直接ティッカーシンボルを入力")
+    print("  例: AAPL, MSFT, 7203.T など")
+    print("-" * 60)
+    ticker_input = input("解析対象のティッカーシンボルを入力してください: ").strip()
+    
+    # 省略入力をチェックして変換
+    ticker_input_lower = ticker_input.lower()
+    if ticker_input_lower in ticker_shortcuts:
+        ticker_symbol = ticker_shortcuts[ticker_input_lower]
+        print(f"省略入力 '{ticker_input}' → '{ticker_symbol}' に変換しました")
+    else:
+        ticker_symbol = ticker_input.upper()
+    
     start_date_str = input("解析開始日(YYYY-MM-DD)を入力してください: ")
     end_date_str = input("解析終了日(YYYY-MM-DD)を入力してください: ")
 
     print("\n" + "="*60)
     print(f"Dragon King - LPPLS分析")
     print("="*60)
-    print(f"対象銘柄: {ticker_symbol}")
+    if ticker_input_lower in ticker_shortcuts:
+        print(f"対象銘柄: {ticker_symbol} (入力: {ticker_input})")
+    else:
+        print(f"対象銘柄: {ticker_symbol}")
     print(f"分析期間: {start_date_str} ～ {end_date_str}")
     print("="*60)
     print("データ取得中...")
@@ -75,7 +104,10 @@ if __name__ == '__main__':
         print("\n" + "="*60)
         print("LPPLS分析結果")
         print("="*60)
-        print(f"対象銘柄: {ticker_symbol}")
+        if ticker_input_lower in ticker_shortcuts:
+            print(f"対象銘柄: {ticker_symbol} (入力: {ticker_input})")
+        else:
+            print(f"対象銘柄: {ticker_symbol}")
         print(f"分析期間: {actual_start} ～ {actual_end}")
         print(f"データ数: {data_points:,} 件")
         print("-"*60)
