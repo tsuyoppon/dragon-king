@@ -15,7 +15,9 @@ if __name__ == '__main__':
     ticker_shortcuts = {
         'nikkei': '^N225',
         'sp500': '^GSPC', 
-        'nas': '^IXIC'
+        'nas': '^IXIC',
+        'usdjpy': 'JPY=X',
+        'dax': '^GDAXI'
     }
     
     # ティッカーシンボルをユーザーから入力
@@ -26,6 +28,8 @@ if __name__ == '__main__':
     print("  Nikkei → ^N225 (日経平均)")
     print("  SP500  → ^GSPC (S&P500)")
     print("  Nas    → ^IXIC (NASDAQ)")
+    print("  USDJPY → JPY=X (ドル円)")
+    print("  DAX    → ^GDAXI (ドイツDAX)")
     print("【その他】直接ティッカーシンボルを入力")
     print("  例: AAPL, MSFT, 7203.T など")
     print("-" * 60)

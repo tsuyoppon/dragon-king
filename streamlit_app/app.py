@@ -73,7 +73,9 @@ def main():
     ticker_shortcuts = {
         'nikkei': '^N225',
         'sp500': '^GSPC', 
-        'nas': '^IXIC'
+        'nas': '^IXIC',
+        'usdjpy': 'JPY=X',
+        'dax': '^GDAXI'
     }
     
     # タイトル表示（元のスクリプトと同じ形式）
@@ -84,6 +86,8 @@ def main():
     st.text("  Nikkei → ^N225 (日経平均)")
     st.text("  SP500  → ^GSPC (S&P500)")
     st.text("  Nas    → ^IXIC (NASDAQ)")
+    st.text("  USDJPY → JPY=X (ドル円)")
+    st.text("  DAX    → ^GDAXI (ドイツDAX)")
     st.text("【その他】直接ティッカーシンボルを入力")
     st.text("  例: AAPL, MSFT, 7203.T など")
     st.text("-" * 60)
