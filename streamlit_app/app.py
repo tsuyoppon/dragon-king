@@ -75,7 +75,9 @@ def main():
         'sp500': '^GSPC', 
         'nas': '^IXIC',
         'usdjpy': 'JPY=X',
-        'dax': '^GDAXI'
+        'dax': '^GDAXI',
+        'jreit': '1345.T',
+        'nifty': '^NSEI'
     }
     
     # タイトル表示（元のスクリプトと同じ形式）
@@ -88,6 +90,8 @@ def main():
     st.text("  Nas    → ^IXIC (NASDAQ)")
     st.text("  USDJPY → JPY=X (ドル円)")
     st.text("  DAX    → ^GDAXI (ドイツDAX)")
+    st.text("  JREIT  → 1345.T (日本REIT)")
+    st.text("  Nifty  → ^NSEI (インドNifty50)")
     st.text("【その他】直接ティッカーシンボルを入力")
     st.text("  例: AAPL, MSFT, 7203.T など")
     st.text("-" * 60)

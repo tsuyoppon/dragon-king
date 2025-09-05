@@ -17,7 +17,9 @@ if __name__ == '__main__':
         'sp500': '^GSPC', 
         'nas': '^IXIC',
         'usdjpy': 'JPY=X',
-        'dax': '^GDAXI'
+        'dax': '^GDAXI',
+        'jreit': '1345.T',
+        'nifty': '^NSEI'
     }
     
     # ティッカーシンボルをユーザーから入力
@@ -30,6 +32,8 @@ if __name__ == '__main__':
     print("  Nas    → ^IXIC (NASDAQ)")
     print("  USDJPY → JPY=X (ドル円)")
     print("  DAX    → ^GDAXI (ドイツDAX)")
+    print("  JREIT  → 1345.T (日本REIT)")
+    print("  Nifty  → ^NSEI (インドNifty50)")
     print("【その他】直接ティッカーシンボルを入力")
     print("  例: AAPL, MSFT, 7203.T など")
     print("-" * 60)
