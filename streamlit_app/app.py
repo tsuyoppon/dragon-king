@@ -77,33 +77,6 @@ def fetch_stock_data(ticker_symbol, start_date_str, end_date_str):
             return None, f"❌ データ取得エラー: {error_msg}"
 
 def main():
-    # 🔧 matplotlib テスト表示
-    st.write("🔧 **matplotlib表示テスト**")
-    try:
-        import numpy as np
-        test_fig, test_ax = plt.subplots(figsize=(6, 3))
-        x = np.linspace(0, 10, 100)
-        y = np.sin(x)
-        test_ax.plot(x, y, 'b-', label='sin(x)')
-        test_ax.set_title('matplotlib テスト')
-        test_ax.legend()
-        
-        # Base64画像として表示
-        import io
-        import base64
-        test_buf = io.BytesIO()
-        test_fig.savefig(test_buf, format='png', dpi=100, bbox_inches='tight')
-        test_buf.seek(0)
-        test_img_b64 = base64.b64encode(test_buf.getvalue()).decode()
-        st.markdown(f'<img src="data:image/png;base64,{test_img_b64}" style="width:50%">', 
-                   unsafe_allow_html=True)
-        plt.close(test_fig)
-        st.write("✅ matplotlib基本機能は動作しています")
-    except Exception as test_error:
-        st.write(f"❌ matplotlibテスト失敗: {test_error}")
-    
-    st.write("---")
-    
     # セッション状態の初期化
     if 'analysis_completed' not in st.session_state:
         st.session_state.analysis_completed = False
@@ -482,32 +455,8 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
             plt.title(f'{ticker_symbol} - LPPLS フィット結果 ({actual_start} ～ {actual_end})')
             plt.tight_layout()
             
-            st.write(f"- 表示するfigure: {active_fig.number} (axes数: {len(active_fig.axes)})")
-            st.write("- グラフをStreamlitに表示中...")
-            
-            # 図形の詳細情報を確認
-            st.write("🔍 **図形詳細情報**")
+            # フィット結果グラフを画像として表示
             try:
-                ax = active_fig.axes[0]
-                lines = ax.get_lines()
-                st.write(f"- プロット線の数: {len(lines)}")
-                for i, line in enumerate(lines):
-                    xdata, ydata = line.get_data()
-                    st.write(f"  線{i+1}: {len(xdata)} points, color={line.get_color()}")
-                
-                # 図形の実際のサイズを確認
-                bbox = active_fig.bbox_inches
-                st.write(f"- 図形のbbox: {bbox}")
-                
-            except Exception as inspect_error:
-                st.write(f"- 図形詳細取得エラー: {inspect_error}")
-            
-            # 複数の表示方法を試行
-            display_success = False
-            
-            # 方法0: 強制画像表示（最初に試行）
-            try:
-                st.write("🔧 **方法0: 強制画像表示**")
                 import io
                 import base64
                 
@@ -522,29 +471,14 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                 img_b64 = base64.b64encode(buf.getvalue()).decode()
                 st.markdown(f'<img src="data:image/png;base64,{img_b64}" style="width:100%">', 
                            unsafe_allow_html=True)
-                display_success = True
-                st.write("✅ 方法0成功: 強制画像表示")
                 
-            except Exception as e0:
-                st.write(f"❌ 方法0失敗: {str(e0)}")
-            
-            # 方法1: 標準的な表示
-            if not display_success:
+            except Exception as display_error:
+                st.error(f"⚠️ グラフの表示でエラーが発生しました: {str(display_error)}")
+                # フォールバック: 従来のst.pyplot()を試行
                 try:
-                    st.pyplot(active_fig, clear_figure=False, use_container_width=True)
-                    display_success = True
-                    st.write("✅ 方法1成功: 標準表示")
-                except Exception as e1:
-                    st.write(f"❌ 方法1失敗: {str(e1)}")
-            
-            # 方法2: パラメータ調整版
-            if not display_success:
-                try:
-                    st.pyplot(active_fig, clear_figure=True)
-                    display_success = True  
-                    st.write("✅ 方法2成功: clear_figure=True")
-                except Exception as e2:
-                    st.write(f"❌ 方法2失敗: {str(e2)}")
+                    st.pyplot(active_fig, clear_figure=False)
+                except Exception as fallback_error:
+                    st.error(f"⚠️ フォールバック表示も失敗しました: {str(fallback_error)}")
             
             # 方法3: 図形を保存して画像として表示
             if not display_success:
