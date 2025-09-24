@@ -438,34 +438,26 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
             st.write(f"- 現在のfigure number: {current_fig.number}")
             st.write(f"- axes数: {len(current_fig.axes)}")
             
+            # すべてのfigureを確認
+            all_figs = [plt.figure(num) for num in plt.get_fignums()]
+            st.write(f"- 全figure数: {len(all_figs)}")
+            for i, fig_check in enumerate(all_figs):
+                st.write(f"  Figure {fig_check.number}: axes数={len(fig_check.axes)}")
+            
+            # LPPLSが作成したfigure（通常は最後のfigure）を使用
+            active_fig = current_fig if current_fig.axes else fig
+            
             # タイトルを設定
+            plt.figure(active_fig.number)  # アクティブなfigureを選択
             plt.title(f'{ticker_symbol} - LPPLS フィット結果 ({actual_start} ～ {actual_end})')
             plt.tight_layout()
             
+            st.write(f"- 表示するfigure: {active_fig.number} (axes数: {len(active_fig.axes)})")
             st.write("- グラフをStreamlitに表示中...")
             
-            # 複数の表示方法を試行
-            try:
-                # 方法1: 作成したfigureを使用
-                st.pyplot(fig, clear_figure=False)
-                st.write("✅ 方法1成功: 作成したfigureで表示")
-            except Exception as e1:
-                st.write(f"❌ 方法1失敗: {str(e1)}")
-                
-                try:
-                    # 方法2: 現在のfigureを使用
-                    st.pyplot(current_fig, clear_figure=False)
-                    st.write("✅ 方法2成功: 現在のfigureで表示")
-                except Exception as e2:
-                    st.write(f"❌ 方法2失敗: {str(e2)}")
-                    
-                    try:
-                        # 方法3: パラメータなしで表示
-                        st.pyplot()
-                        st.write("✅ 方法3成功: パラメータなしで表示")
-                    except Exception as e3:
-                        st.write(f"❌ 方法3失敗: {str(e3)}")
-                        raise e1
+            # 確実な表示方法: アクティブなfigureを使用
+            st.pyplot(active_fig, clear_figure=False)
+            st.write("✅ フィット結果グラフ表示成功")
             
         except Exception as e:
             st.error(f"⚠️ グラフの表示でエラーが発生しました: {str(e)}")
@@ -505,6 +497,9 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                 try:
                     st.write("🔍 **信頼指標プロット デバッグ情報**")
                     
+                    # 既存のfigureをクリア
+                    plt.close('all')
+                    
                     # 信頼指標用の新しいfigureを作成
                     fig2, ax2 = plt.subplots(figsize=(15, 10))
                     st.write(f"- 信頼指標用figure作成: number={fig2.number}")
@@ -514,13 +509,19 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                     lppls_model.plot_confidence_indicators(res)
                     st.write("- 信頼指標プロット完了")
                     
-                    # タイトルを設定
+                    # LPPLSが作成した実際のfigureを取得
+                    confidence_fig = plt.gcf()
+                    st.write(f"- 信頼指標の実際のfigure: number={confidence_fig.number}")
+                    st.write(f"- 信頼指標のaxes数: {len(confidence_fig.axes)}")
+                    
+                    # タイトルを設定（実際のfigureに対して）
+                    plt.figure(confidence_fig.number)
                     plt.suptitle(f'{ticker_symbol} - LPPLS 信頼指標 ({actual_start} ～ {actual_end})', y=0.98)
                     plt.tight_layout()
                     
                     st.write("- 信頼指標グラフをStreamlitに表示中...")
-                    # Streamlit 1.50.0対応: widthパラメータを使用
-                    st.pyplot(fig2, clear_figure=False)
+                    # 実際のfigureを表示
+                    st.pyplot(confidence_fig, clear_figure=False)
                     st.write("✅ 信頼指標グラフ表示成功")
                     
                 except Exception as plot_error:
