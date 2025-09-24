@@ -29,6 +29,7 @@ matplotlib.use('Agg')
 
 # matplotlibの設定を最適化
 plt.ioff()  # インタラクティブモードを無効化
+plt.style.use('default')  # デフォルトスタイルを確実に適用
 
 # 日本語フォント設定（シンプル化）
 matplotlib.rcParams['font.family'] = ['DejaVu Sans']
@@ -455,9 +456,43 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
             st.write(f"- 表示するfigure: {active_fig.number} (axes数: {len(active_fig.axes)})")
             st.write("- グラフをStreamlitに表示中...")
             
-            # 確実な表示方法: アクティブなfigureを使用
-            st.pyplot(active_fig, clear_figure=False)
-            st.write("✅ フィット結果グラフ表示成功")
+            # 複数の表示方法を試行
+            display_success = False
+            
+            # 方法1: 標準的な表示
+            try:
+                st.pyplot(active_fig, clear_figure=False, use_container_width=True)
+                display_success = True
+                st.write("✅ 方法1成功: 標準表示")
+            except Exception as e1:
+                st.write(f"❌ 方法1失敗: {str(e1)}")
+            
+            # 方法2: パラメータ調整版
+            if not display_success:
+                try:
+                    st.pyplot(active_fig, clear_figure=True)
+                    display_success = True  
+                    st.write("✅ 方法2成功: clear_figure=True")
+                except Exception as e2:
+                    st.write(f"❌ 方法2失敗: {str(e2)}")
+            
+            # 方法3: 図形を保存して画像として表示
+            if not display_success:
+                try:
+                    import io
+                    buf = io.BytesIO()
+                    active_fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+                    buf.seek(0)
+                    st.image(buf, caption=f'{ticker_symbol} - LPPLS フィット結果', use_column_width=True)
+                    display_success = True
+                    st.write("✅ 方法3成功: 画像として表示")
+                except Exception as e3:
+                    st.write(f"❌ 方法3失敗: {str(e3)}")
+            
+            if not display_success:
+                st.error("⚠️ 全ての表示方法が失敗しました")
+            else:
+                st.write("✅ フィット結果グラフ表示成功")
             
         except Exception as e:
             st.error(f"⚠️ グラフの表示でエラーが発生しました: {str(e)}")
@@ -520,9 +555,44 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                     plt.tight_layout()
                     
                     st.write("- 信頼指標グラフをStreamlitに表示中...")
-                    # 実際のfigureを表示
-                    st.pyplot(confidence_fig, clear_figure=False)
-                    st.write("✅ 信頼指標グラフ表示成功")
+                    
+                    # 複数の表示方法を試行
+                    confidence_success = False
+                    
+                    # 方法1: 標準表示
+                    try:
+                        st.pyplot(confidence_fig, clear_figure=False, use_container_width=True)
+                        confidence_success = True
+                        st.write("✅ 信頼指標方法1成功: 標準表示")
+                    except Exception as e1:
+                        st.write(f"❌ 信頼指標方法1失敗: {str(e1)}")
+                    
+                    # 方法2: clear_figure=True版
+                    if not confidence_success:
+                        try:
+                            st.pyplot(confidence_fig, clear_figure=True)
+                            confidence_success = True
+                            st.write("✅ 信頼指標方法2成功: clear_figure=True")
+                        except Exception as e2:
+                            st.write(f"❌ 信頼指標方法2失敗: {str(e2)}")
+                    
+                    # 方法3: 画像として表示
+                    if not confidence_success:
+                        try:
+                            import io
+                            buf2 = io.BytesIO()
+                            confidence_fig.savefig(buf2, format='png', dpi=150, bbox_inches='tight')
+                            buf2.seek(0)
+                            st.image(buf2, caption=f'{ticker_symbol} - LPPLS 信頼指標', use_column_width=True)
+                            confidence_success = True
+                            st.write("✅ 信頼指標方法3成功: 画像として表示")
+                        except Exception as e3:
+                            st.write(f"❌ 信頼指標方法3失敗: {str(e3)}")
+                    
+                    if confidence_success:
+                        st.write("✅ 信頼指標グラフ表示成功")
+                    else:
+                        st.error("⚠️ 信頼指標の全ての表示方法が失敗しました")
                     
                 except Exception as plot_error:
                     st.error(f"⚠️ 信頼指標グラフの表示でエラーが発生しました: {str(plot_error)}")
