@@ -264,8 +264,17 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
         st.text("=" * 60)
         st.text("データ取得中...")
         
+        # 🔍 デバッグ: 環境情報を表示
+        st.write("🔍 **環境情報**")
+        st.write(f"- Python version: {sys.version}")
+        st.write(f"- Streamlit version: {st.__version__}")
+        st.write(f"- Matplotlib version: {matplotlib.__version__}")
+        st.write(f"- Matplotlib backend: {matplotlib.get_backend()}")
+        
         # データ取得
+        st.write("🔍 **データ取得開始**")
         data, error = fetch_stock_data(ticker_symbol, start_date_str, end_date_str)
+        st.write("🔍 **データ取得完了**")
         
         if error:
             st.error(error)
@@ -294,25 +303,36 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
         
         # LPPLS分析実行
         st.text("LPPLS分析を開始します...")
+        st.write("🔍 **LPPLS処理開始**")
         
         # 日付をordinal形式（数値）に変換
         time = [pd.Timestamp.toordinal(date) for date in data['Date']]
+        st.write(f"- 時系列データ変換完了: {len(time)} points")
         
         # 調整後終値をlog変換
         price = np.log(data['Adj Close'].values)
+        st.write(f"- 価格データlog変換完了: min={price.min():.4f}, max={price.max():.4f}")
         
         # LPPLSモデル用の観測データを作成
         observations = np.array([time, price])
+        st.write(f"- 観測データ作成完了: shape={observations.shape}")
         
         # LPPLSモデルを初期化
         lppls_model = lppls.LPPLS(observations=observations)
+        st.write("- LPPLSモデル初期化完了")
         
         # モデルをフィッティング
         MAX_SEARCHES = 25
         st.text(f"モデルフィッティング中... (最大試行回数: {MAX_SEARCHES})")
+        st.write("🔍 **フィッティング開始**")
         
         with st.spinner("フィッティング実行中..."):
             tc, m, w, a, b, c, c1, c2, O, D = lppls_model.fit(MAX_SEARCHES)
+            
+        st.write("🔍 **フィッティング完了**")
+        st.write(f"- 取得されたパラメータ: tc={tc:.4f}, m={m:.4f}, w={w:.4f}")
+        st.write(f"- オシレーション指標: O={O:.4f}")
+        st.write(f"- ダミアン指標: D={D:.4f}")
         
         # fit()の結果があるか確認
         if not lppls_model.coef_:
@@ -390,29 +410,78 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
         st.text("")
         st.text("フィット結果をプロット中...")
         
+        # デバッグ情報の表示
+        st.write("🔍 **デバッグ情報 (プロット前)**")
+        st.write(f"- matplotlib backend: {matplotlib.get_backend()}")
+        st.write(f"- matplotlib version: {matplotlib.__version__}")
+        st.write(f"- streamlit version: {st.__version__}")
+        st.write(f"- 現在のfigure数: {len(plt.get_fignums())}")
+        
         try:
             # 全ての既存のfigureをクリア
             plt.close('all')
+            st.write(f"- figure クリア後: {len(plt.get_fignums())}")
             
             # 新しいFigureオブジェクトを明示的に作成
             fig, ax = plt.subplots(figsize=(12, 8))
+            st.write(f"- 新しいfigure作成後: {len(plt.get_fignums())}")
+            st.write(f"- figure サイズ: {fig.get_size_inches()}")
+            st.write(f"- figure number: {fig.number}")
             
-            # LPPLSのplot_fitを実行（新しいfigureで）
+            # LPPLSのplot_fitを実行
+            st.write("- LPPLSのplot_fit実行中...")
             lppls_model.plot_fit()
+            st.write("- plot_fit完了")
+            
+            # 現在のfigureの状態を確認
+            current_fig = plt.gcf()
+            st.write(f"- 現在のfigure number: {current_fig.number}")
+            st.write(f"- axes数: {len(current_fig.axes)}")
             
             # タイトルを設定
             plt.title(f'{ticker_symbol} - LPPLS フィット結果 ({actual_start} ～ {actual_end})')
             plt.tight_layout()
             
-            # Streamlit 1.50.0対応: widthパラメータを使用
-            st.pyplot(fig, clear_figure=False)
+            st.write("- グラフをStreamlitに表示中...")
+            
+            # 複数の表示方法を試行
+            try:
+                # 方法1: 作成したfigureを使用
+                st.pyplot(fig, clear_figure=False)
+                st.write("✅ 方法1成功: 作成したfigureで表示")
+            except Exception as e1:
+                st.write(f"❌ 方法1失敗: {str(e1)}")
+                
+                try:
+                    # 方法2: 現在のfigureを使用
+                    st.pyplot(current_fig, clear_figure=False)
+                    st.write("✅ 方法2成功: 現在のfigureで表示")
+                except Exception as e2:
+                    st.write(f"❌ 方法2失敗: {str(e2)}")
+                    
+                    try:
+                        # 方法3: パラメータなしで表示
+                        st.pyplot()
+                        st.write("✅ 方法3成功: パラメータなしで表示")
+                    except Exception as e3:
+                        st.write(f"❌ 方法3失敗: {str(e3)}")
+                        raise e1
             
         except Exception as e:
             st.error(f"⚠️ グラフの表示でエラーが発生しました: {str(e)}")
-            # デバッグ情報を追加
-            st.write("デバッグ情報:")
+            # 詳細なデバッグ情報を追加
+            st.write("🔍 **エラー詳細情報**")
+            st.write(f"- エラー型: {type(e).__name__}")
+            st.write(f"- エラーメッセージ: {str(e)}")
+            st.write(f"- matplotlib backend: {matplotlib.get_backend()}")
             st.write(f"- matplotlib version: {matplotlib.__version__}")
+            st.write(f"- streamlit version: {st.__version__}")
             st.write(f"- Python version: {sys.version}")
+            st.write(f"- 現在のfigure数: {len(plt.get_fignums())}")
+            
+            # トレースバックも表示
+            import traceback
+            st.code(traceback.format_exc(), language="python")
         finally:
             plt.close('all')  # 全てのfigureを確実に閉じる
         
@@ -434,18 +503,25 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                 st.text("信頼指標をプロット中...")
                 
                 try:
+                    st.write("🔍 **信頼指標プロット デバッグ情報**")
+                    
                     # 信頼指標用の新しいfigureを作成
                     fig2, ax2 = plt.subplots(figsize=(15, 10))
+                    st.write(f"- 信頼指標用figure作成: number={fig2.number}")
                     
                     # 信頼指標をプロット
+                    st.write("- 信頼指標プロット実行中...")
                     lppls_model.plot_confidence_indicators(res)
+                    st.write("- 信頼指標プロット完了")
                     
                     # タイトルを設定
                     plt.suptitle(f'{ticker_symbol} - LPPLS 信頼指標 ({actual_start} ～ {actual_end})', y=0.98)
                     plt.tight_layout()
                     
+                    st.write("- 信頼指標グラフをStreamlitに表示中...")
                     # Streamlit 1.50.0対応: widthパラメータを使用
                     st.pyplot(fig2, clear_figure=False)
+                    st.write("✅ 信頼指標グラフ表示成功")
                     
                 except Exception as plot_error:
                     st.error(f"⚠️ 信頼指標グラフの表示でエラーが発生しました: {str(plot_error)}")
