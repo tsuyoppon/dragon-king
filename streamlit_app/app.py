@@ -267,17 +267,8 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
         st.text("=" * 60)
         st.text("データ取得中...")
         
-        # 🔍 デバッグ: 環境情報を表示
-        st.write("🔍 **環境情報**")
-        st.write(f"- Python version: {sys.version}")
-        st.write(f"- Streamlit version: {st.__version__}")
-        st.write(f"- Matplotlib version: {matplotlib.__version__}")
-        st.write(f"- Matplotlib backend: {matplotlib.get_backend()}")
-        
         # データ取得
-        st.write("🔍 **データ取得開始**")
         data, error = fetch_stock_data(ticker_symbol, start_date_str, end_date_str)
-        st.write("🔍 **データ取得完了**")
         
         if error:
             st.error(error)
@@ -306,36 +297,25 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
         
         # LPPLS分析実行
         st.text("LPPLS分析を開始します...")
-        st.write("🔍 **LPPLS処理開始**")
         
         # 日付をordinal形式（数値）に変換
         time = [pd.Timestamp.toordinal(date) for date in data['Date']]
-        st.write(f"- 時系列データ変換完了: {len(time)} points")
         
         # 調整後終値をlog変換
         price = np.log(data['Adj Close'].values)
-        st.write(f"- 価格データlog変換完了: min={price.min():.4f}, max={price.max():.4f}")
         
         # LPPLSモデル用の観測データを作成
         observations = np.array([time, price])
-        st.write(f"- 観測データ作成完了: shape={observations.shape}")
         
         # LPPLSモデルを初期化
         lppls_model = lppls.LPPLS(observations=observations)
-        st.write("- LPPLSモデル初期化完了")
         
         # モデルをフィッティング
         MAX_SEARCHES = 25
         st.text(f"モデルフィッティング中... (最大試行回数: {MAX_SEARCHES})")
-        st.write("🔍 **フィッティング開始**")
         
         with st.spinner("フィッティング実行中..."):
             tc, m, w, a, b, c, c1, c2, O, D = lppls_model.fit(MAX_SEARCHES)
-            
-        st.write("🔍 **フィッティング完了**")
-        st.write(f"- 取得されたパラメータ: tc={tc:.4f}, m={m:.4f}, w={w:.4f}")
-        st.write(f"- オシレーション指標: O={O:.4f}")
-        st.write(f"- ダミアン指標: D={D:.4f}")
         
         # fit()の結果があるか確認
         if not lppls_model.coef_:
@@ -413,39 +393,18 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
         st.text("")
         st.text("フィット結果をプロット中...")
         
-        # デバッグ情報の表示
-        st.write("🔍 **デバッグ情報 (プロット前)**")
-        st.write(f"- matplotlib backend: {matplotlib.get_backend()}")
-        st.write(f"- matplotlib version: {matplotlib.__version__}")
-        st.write(f"- streamlit version: {st.__version__}")
-        st.write(f"- 現在のfigure数: {len(plt.get_fignums())}")
-        
         try:
             # 全ての既存のfigureをクリア
             plt.close('all')
-            st.write(f"- figure クリア後: {len(plt.get_fignums())}")
             
             # 新しいFigureオブジェクトを明示的に作成
             fig, ax = plt.subplots(figsize=(12, 8))
-            st.write(f"- 新しいfigure作成後: {len(plt.get_fignums())}")
-            st.write(f"- figure サイズ: {fig.get_size_inches()}")
-            st.write(f"- figure number: {fig.number}")
             
             # LPPLSのplot_fitを実行
-            st.write("- LPPLSのplot_fit実行中...")
             lppls_model.plot_fit()
-            st.write("- plot_fit完了")
             
             # 現在のfigureの状態を確認
             current_fig = plt.gcf()
-            st.write(f"- 現在のfigure number: {current_fig.number}")
-            st.write(f"- axes数: {len(current_fig.axes)}")
-            
-            # すべてのfigureを確認
-            all_figs = [plt.figure(num) for num in plt.get_fignums()]
-            st.write(f"- 全figure数: {len(all_figs)}")
-            for i, fig_check in enumerate(all_figs):
-                st.write(f"  Figure {fig_check.number}: axes数={len(fig_check.axes)}")
             
             # LPPLSが作成したfigure（通常は最後のfigure）を使用
             active_fig = current_fig if current_fig.axes else fig
@@ -480,39 +439,8 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                 except Exception as fallback_error:
                     st.error(f"⚠️ フォールバック表示も失敗しました: {str(fallback_error)}")
             
-            # 方法3: 図形を保存して画像として表示
-            if not display_success:
-                try:
-                    import io
-                    buf = io.BytesIO()
-                    active_fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-                    buf.seek(0)
-                    st.image(buf, caption=f'{ticker_symbol} - LPPLS フィット結果', use_column_width=True)
-                    display_success = True
-                    st.write("✅ 方法3成功: 画像として表示")
-                except Exception as e3:
-                    st.write(f"❌ 方法3失敗: {str(e3)}")
-            
-            if not display_success:
-                st.error("⚠️ 全ての表示方法が失敗しました")
-            else:
-                st.write("✅ フィット結果グラフ表示成功")
-            
         except Exception as e:
             st.error(f"⚠️ グラフの表示でエラーが発生しました: {str(e)}")
-            # 詳細なデバッグ情報を追加
-            st.write("🔍 **エラー詳細情報**")
-            st.write(f"- エラー型: {type(e).__name__}")
-            st.write(f"- エラーメッセージ: {str(e)}")
-            st.write(f"- matplotlib backend: {matplotlib.get_backend()}")
-            st.write(f"- matplotlib version: {matplotlib.__version__}")
-            st.write(f"- streamlit version: {st.__version__}")
-            st.write(f"- Python version: {sys.version}")
-            st.write(f"- 現在のfigure数: {len(plt.get_fignums())}")
-            
-            # トレースバックも表示
-            import traceback
-            st.code(traceback.format_exc(), language="python")
         finally:
             plt.close('all')  # 全てのfigureを確実に閉じる
         
@@ -534,48 +462,25 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                 st.text("信頼指標をプロット中...")
                 
                 try:
-                    st.write("🔍 **信頼指標プロット デバッグ情報**")
-                    
                     # 既存のfigureをクリア
                     plt.close('all')
                     
                     # 信頼指標用の新しいfigureを作成
                     fig2, ax2 = plt.subplots(figsize=(15, 10))
-                    st.write(f"- 信頼指標用figure作成: number={fig2.number}")
                     
                     # 信頼指標をプロット
-                    st.write("- 信頼指標プロット実行中...")
                     lppls_model.plot_confidence_indicators(res)
-                    st.write("- 信頼指標プロット完了")
                     
                     # LPPLSが作成した実際のfigureを取得
                     confidence_fig = plt.gcf()
-                    st.write(f"- 信頼指標の実際のfigure: number={confidence_fig.number}")
-                    st.write(f"- 信頼指標のaxes数: {len(confidence_fig.axes)}")
                     
                     # タイトルを設定（実際のfigureに対して）
                     plt.figure(confidence_fig.number)
                     plt.suptitle(f'{ticker_symbol} - LPPLS 信頼指標 ({actual_start} ～ {actual_end})', y=0.98)
                     plt.tight_layout()
                     
-                    st.write("- 信頼指標グラフをStreamlitに表示中...")
-                    
-                    # 信頼指標の詳細確認
-                    st.write("🔍 **信頼指標図形詳細**")
+                    # 信頼指標グラフを画像として表示
                     try:
-                        st.write(f"- サブプロット数: {len(confidence_fig.axes)}")
-                        for i, ax in enumerate(confidence_fig.axes):
-                            lines = ax.get_lines()
-                            st.write(f"  サブプロット{i+1}: {len(lines)} lines")
-                    except Exception as ci_inspect_error:
-                        st.write(f"- 信頼指標詳細取得エラー: {ci_inspect_error}")
-                    
-                    # 複数の表示方法を試行
-                    confidence_success = False
-                    
-                    # 方法0: 強制画像表示（信頼指標用）
-                    try:
-                        st.write("🔧 **信頼指標方法0: 強制画像表示**")
                         import io
                         import base64
                         
@@ -588,29 +493,14 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                         img_b64_2 = base64.b64encode(buf2.getvalue()).decode()
                         st.markdown(f'<img src="data:image/png;base64,{img_b64_2}" style="width:100%">', 
                                    unsafe_allow_html=True)
-                        confidence_success = True
-                        st.write("✅ 信頼指標方法0成功: 強制画像表示")
                         
-                    except Exception as ce0:
-                        st.write(f"❌ 信頼指標方法0失敗: {str(ce0)}")
-                    
-                    # 方法1: 標準表示
-                    if not confidence_success:
+                    except Exception as confidence_display_error:
+                        st.error(f"⚠️ 信頼指標グラフの表示でエラーが発生しました: {str(confidence_display_error)}")
+                        # フォールバック: 従来のst.pyplot()を試行
                         try:
-                            st.pyplot(confidence_fig, clear_figure=False, use_container_width=True)
-                            confidence_success = True
-                            st.write("✅ 信頼指標方法1成功: 標準表示")
-                        except Exception as e1:
-                            st.write(f"❌ 信頼指標方法1失敗: {str(e1)}")
-                    
-                    # 方法2: clear_figure=True版
-                    if not confidence_success:
-                        try:
-                            st.pyplot(confidence_fig, clear_figure=True)
-                            confidence_success = True
-                            st.write("✅ 信頼指標方法2成功: clear_figure=True")
-                        except Exception as e2:
-                            st.write(f"❌ 信頼指標方法2失敗: {str(e2)}")
+                            st.pyplot(confidence_fig, clear_figure=False)
+                        except Exception as confidence_fallback_error:
+                            st.error(f"⚠️ 信頼指標フォールバック表示も失敗しました: {str(confidence_fallback_error)}")
                     
                     # 方法3: 画像として表示
                     if not confidence_success:
