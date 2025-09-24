@@ -17,11 +17,22 @@ import sys
 import time
 from io import StringIO
 
+# Streamlit設定
+st.set_page_config(
+    page_title="Dragon King - LPPLS分析ツール",
+    page_icon="📈",
+    layout="wide"
+)
+
 # Streamlit用のmatplotlibバックエンド設定
 matplotlib.use('Agg')
 
+# matplotlibの設定を最適化
+plt.ioff()  # インタラクティブモードを無効化
+
 # 日本語フォント設定（シンプル化）
 matplotlib.rcParams['font.family'] = ['DejaVu Sans']
+matplotlib.rcParams['figure.max_open_warning'] = 0  # 警告を抑制
 
 # 警告を非表示
 warnings.filterwarnings('ignore')
@@ -379,11 +390,30 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
         st.text("")
         st.text("フィット結果をプロット中...")
         
-        plt.figure(figsize=(12, 8))
-        lppls_model.plot_fit()
-        plt.title(f'{ticker_symbol} - LPPLS フィット結果 ({actual_start} ～ {actual_end})')
-        st.pyplot(plt.gcf())
-        plt.close()
+        try:
+            # Figureオブジェクトを明示的に作成
+            fig, ax = plt.subplots(figsize=(12, 8))
+            
+            # 現在のfigureを設定
+            plt.figure(fig.number)
+            
+            # LPPLSのplot_fitを実行
+            lppls_model.plot_fit()
+            
+            # タイトルを設定
+            plt.title(f'{ticker_symbol} - LPPLS フィット結果 ({actual_start} ～ {actual_end})')
+            
+            # Streamlit 1.50.0対応: use_container_widthパラメータを追加
+            st.pyplot(fig, clear_figure=True, use_container_width=True)
+            
+        except Exception as e:
+            st.error(f"⚠️ グラフの表示でエラーが発生しました: {str(e)}")
+            # デバッグ情報を追加
+            st.write("デバッグ情報:")
+            st.write(f"- matplotlib version: {matplotlib.__version__}")
+            st.write(f"- Python version: {sys.version}")
+        finally:
+            plt.close('all')  # 全てのfigureを確実に閉じる
         
         # 信頼指標を計算してプロット
         st.text("")
@@ -401,11 +431,30 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                 )
                 
                 st.text("信頼指標をプロット中...")
-                plt.figure(figsize=(12, 10))
-                lppls_model.plot_confidence_indicators(res)
-                plt.suptitle(f'{ticker_symbol} - LPPLS 信頼指標 ({actual_start} ～ {actual_end})', y=0.98)
-                st.pyplot(plt.gcf())
-                plt.close()
+                
+                try:
+                    # Figureオブジェクトを明示的に作成
+                    fig, ax = plt.subplots(figsize=(12, 10))
+                    
+                    # 現在のfigureを設定
+                    plt.figure(fig.number)
+                    
+                    # 信頼指標をプロット
+                    lppls_model.plot_confidence_indicators(res)
+                    
+                    # タイトルを設定
+                    plt.suptitle(f'{ticker_symbol} - LPPLS 信頼指標 ({actual_start} ～ {actual_end})', y=0.98)
+                    
+                    # Streamlit 1.50.0対応: use_container_widthパラメータを追加
+                    st.pyplot(fig, clear_figure=True, use_container_width=True)
+                    
+                except Exception as plot_error:
+                    st.error(f"⚠️ 信頼指標グラフの表示でエラーが発生しました: {str(plot_error)}")
+                    # デバッグ情報を追加
+                    st.write("デバッグ情報:")
+                    st.write(f"- matplotlib version: {matplotlib.__version__}")
+                finally:
+                    plt.close('all')  # 全てのfigureを確実に閉じる
                 
             except Exception as e:
                 st.warning(f"⚠️ 信頼指標の計算でエラーが発生しました: {str(e)}")
