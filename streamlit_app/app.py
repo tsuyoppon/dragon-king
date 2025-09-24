@@ -502,30 +502,8 @@ def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_s
                         except Exception as confidence_fallback_error:
                             st.error(f"⚠️ 信頼指標フォールバック表示も失敗しました: {str(confidence_fallback_error)}")
                     
-                    # 方法3: 画像として表示
-                    if not confidence_success:
-                        try:
-                            import io
-                            buf2 = io.BytesIO()
-                            confidence_fig.savefig(buf2, format='png', dpi=150, bbox_inches='tight')
-                            buf2.seek(0)
-                            st.image(buf2, caption=f'{ticker_symbol} - LPPLS 信頼指標', use_column_width=True)
-                            confidence_success = True
-                            st.write("✅ 信頼指標方法3成功: 画像として表示")
-                        except Exception as e3:
-                            st.write(f"❌ 信頼指標方法3失敗: {str(e3)}")
-                    
-                    if confidence_success:
-                        st.write("✅ 信頼指標グラフ表示成功")
-                    else:
-                        st.error("⚠️ 信頼指標の全ての表示方法が失敗しました")
-                    
                 except Exception as plot_error:
                     st.error(f"⚠️ 信頼指標グラフの表示でエラーが発生しました: {str(plot_error)}")
-                    # デバッグ情報を追加
-                    st.write("デバッグ情報:")
-                    st.write(f"- matplotlib version: {matplotlib.__version__}")
-                    st.write(f"- Python version: {sys.version}")
                 finally:
                     plt.close('all')  # 全てのfigureを確実に閉じる
                 
