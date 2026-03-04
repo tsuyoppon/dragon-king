@@ -1,518 +1,448 @@
 """
 Dragon King - LPPLS分析ツール (Streamlit版)
-元のスクリプトの入力・出力形式を忠実に再現
 """
 
-import streamlit as st
-import matplotlib.pyplot as plt
+# matplotlib のバックエンドを pyplot インポート前に設定（必須）
 import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+import io
+import warnings
+import time
+
+import streamlit as st
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from yahooquery import Ticker
-import matplotlib.pyplot as plt
-import matplotlib
-import matplotlib.backends.backend_agg
 from lppls import lppls
-import warnings
-import sys
-import time
-from io import StringIO
 
-# Streamlit設定
+warnings.filterwarnings("ignore")
+
+# ──────────────────────────────────────────────
+# ページ設定（スクリプト内で1回だけ呼び出す）
+# ──────────────────────────────────────────────
 st.set_page_config(
     page_title="Dragon King LPPLS分析ツール",
     page_icon="📈",
-    layout="wide"
+    layout="wide",
 )
 
-# Streamlit用のmatplotlibバックエンド設定
-matplotlib.use('Agg')
+# matplotlib グローバル設定
+plt.ioff()
+matplotlib.rcParams["font.family"] = ["DejaVu Sans"]
+matplotlib.rcParams["figure.max_open_warning"] = 0
 
-# matplotlibの設定を最適化
-plt.ioff()  # インタラクティブモードを無効化
-plt.style.use('default')  # デフォルトスタイルを確実に適用
+# ──────────────────────────────────────────────
+# 定数
+# ──────────────────────────────────────────────
+TICKER_SHORTCUTS: dict[str, str] = {
+    "nikkei": "^N225",
+    "sp500": "^GSPC",
+    "nas": "^IXIC",
+    "usdjpy": "JPY=X",
+    "dax": "^GDAXI",
+    "jreit": "1345.T",
+    "nifty": "^NSEI",
+}
 
-# 日本語フォント設定（シンプル化）
-matplotlib.rcParams['font.family'] = ['DejaVu Sans']
-matplotlib.rcParams['figure.max_open_warning'] = 0  # 警告を抑制
+SHORTCUT_LABELS: dict[str, str] = {
+    "nikkei": "日経平均",
+    "sp500": "S&P500",
+    "nas": "NASDAQ",
+    "usdjpy": "ドル円",
+    "dax": "ドイツDAX",
+    "jreit": "日本REIT",
+    "nifty": "インドNifty50",
+}
 
-# 警告を非表示
-warnings.filterwarnings('ignore')
+MAX_SEARCHES = 25
 
-# ページ設定
-st.set_page_config(
-    page_title="Dragon King - LPPLS分析ツール",
-    page_icon="📈",
-    layout="wide"
-)
 
-@st.cache_data(ttl=300)  # 5分間キャッシュ
-def fetch_stock_data(ticker_symbol, start_date_str, end_date_str):
-    """株価データを取得（キャッシュ付き）"""
+# ──────────────────────────────────────────────
+# データ取得
+# ──────────────────────────────────────────────
+@st.cache_data(ttl=300)
+def fetch_stock_data(
+    ticker_symbol: str, start_date_str: str, end_date_str: str
+) -> tuple:
+    """株価データを取得してキャッシュする（5分間）。
+
+    Returns:
+        (DataFrame, None)  : 成功時
+        (None, error_msg)  : 失敗時
+    """
     try:
-        # リクエスト間隔を空ける
-        time.sleep(0.5)
-        
+        time.sleep(0.5)  # レート制限対策
         ticker = Ticker(ticker_symbol)
         data = ticker.history(start=start_date_str, end=end_date_str)
-        
-        if data.empty:
-            return None, f"ティッカーシンボル '{ticker_symbol}' のデータが見つかりません。"
-            
-        data.reset_index(inplace=True)
-        data.rename(columns={"date": "Date", "adjclose": "Adj Close"}, inplace=True)
-        
-        # タイムゾーン情報を削除
-        data['Date'] = pd.to_datetime(data['Date']).dt.tz_localize(None)
-        data = data.sort_values('Date')
-        
+
+        if data is None or (isinstance(data, pd.DataFrame) and data.empty):
+            return None, f"ティッカー '{ticker_symbol}' のデータが見つかりません。"
+
+        data = data.reset_index()
+        data = data.rename(columns={"date": "Date", "adjclose": "Adj Close"})
+
+        # タイムゾーン除去・ソート（ここで1回だけ実施）
+        data["Date"] = pd.to_datetime(data["Date"]).dt.tz_localize(None)
+        data = data.sort_values("Date").reset_index(drop=True)
+
+        if data["Adj Close"].isna().all():
+            return None, f"ティッカー '{ticker_symbol}' の終値データがありません。"
+
         return data, None
-        
-    except Exception as e:
-        error_msg = str(e)
-        if "429" in error_msg or "too many" in error_msg.lower():
-            return None, "❌ データ取得エラー: アクセス頻度が高すぎます。しばらく待ってから再試行してください。"
-        else:
-            return None, f"❌ データ取得エラー: {error_msg}"
 
-def main():
-    # セッション状態の初期化
-    if 'analysis_completed' not in st.session_state:
-        st.session_state.analysis_completed = False
-    if 'analysis_results' not in st.session_state:
-        st.session_state.analysis_results = None
-    
-    # ティッカーシンボル省略入力の定義
-    ticker_shortcuts = {
-        'nikkei': '^N225',
-        'sp500': '^GSPC', 
-        'nas': '^IXIC',
-        'usdjpy': 'JPY=X',
-        'dax': '^GDAXI',
-        'jreit': '1345.T',
-        'nifty': '^NSEI'
-    }
-    
-    # タイトル表示（元のスクリプトと同じ形式）
-    st.text("=" * 60)
-    st.text("Dragon King - LPPLS分析ツール")
-    st.text("=" * 60)
-    st.text("【省略入力対応】")
-    st.text("  Nikkei → ^N225 (日経平均)")
-    st.text("  SP500  → ^GSPC (S&P500)")
-    st.text("  Nas    → ^IXIC (NASDAQ)")
-    st.text("  USDJPY → JPY=X (ドル円)")
-    st.text("  DAX    → ^GDAXI (ドイツDAX)")
-    st.text("  JREIT  → 1345.T (日本REIT)")
-    st.text("  Nifty  → ^NSEI (インドNifty50)")
-    st.text("【その他】直接ティッカーシンボルを入力")
-    st.text("  例: AAPL, MSFT, 7203.T など")
-    st.text("-" * 60)
-    
-    # ティッカーシンボル入力
-    ticker_input = st.text_input(
-        "解析対象のティッカーシンボルを入力してください:",
-        key="ticker_input"
-    )
-    
-    if ticker_input:
-        # 省略入力をチェックして変換
-        ticker_input_lower = ticker_input.lower()
-        if ticker_input_lower in ticker_shortcuts:
-            ticker_symbol = ticker_shortcuts[ticker_input_lower]
-            st.success(f"省略入力 '{ticker_input}' → '{ticker_symbol}' に変換しました")
-        else:
-            ticker_symbol = ticker_input.upper()
-        
-        st.text("")
-        st.text("-" * 60)
-        st.text("分析期間の入力方式を選択してください:")
-        st.text("1. 開始日と終了日を両方指定 (現行方式)")
-        st.text("2. 終了日から何年前までかを指定")
-        st.text("-" * 60)
-        
-        # 入力方式選択
-        input_method = st.radio(
-            "入力方式を選択:",
-            options=["1", "2"],
-            format_func=lambda x: "1. 開始日と終了日を両方指定" if x == "1" else "2. 終了日から何年前までかを指定",
-            key="input_method"
-        )
-        
-        start_date_str = None
-        end_date_str = None
-        years_back = None
-        
-        if input_method == "1":
-            # 現行方式: 開始日と終了日を両方入力
-            col1, col2 = st.columns(2)
-            with col1:
-                start_date = st.date_input(
-                    "解析開始日:",
-                    value=datetime.now() - timedelta(days=365),
-                    key="start_date"
-                )
-                start_date_str = start_date.strftime('%Y-%m-%d')
-            
-            with col2:
-                end_date = st.date_input(
-                    "解析終了日:",
-                    value=datetime.now(),
-                    key="end_date"
-                )
-                end_date_str = end_date.strftime('%Y-%m-%d')
-                
-        else:
-            # 新方式: 終了日から何年前まで
-            end_date = st.date_input(
-                "解析終了日:",
-                value=datetime.now(),
-                key="end_date_new"
-            )
-            end_date_str = end_date.strftime('%Y-%m-%d')
-            
-            st.text("")
-            st.text("分析期間を選択してください:")
-            st.text("1. 1年前まで")
-            st.text("2. 2年前まで") 
-            st.text("3. 3年前まで")
-            st.text("4. 5年前まで")
-            st.text("5. 10年前まで")
-            st.text("6. カスタム期間")
-            
-            period_choice = st.selectbox(
-                "期間を選択:",
-                options=["1", "2", "3", "4", "5", "6"],
-                format_func=lambda x: {
-                    "1": "1. 1年前まで",
-                    "2": "2. 2年前まで", 
-                    "3": "3. 3年前まで",
-                    "4": "4. 5年前まで",
-                    "5": "5. 10年前まで",
-                    "6": "6. カスタム期間"
-                }[x],
-                key="period_choice"
-            )
-            
-            # 期間に応じて開始日を計算
-            if period_choice == '1':
-                years_back = 1
-            elif period_choice == '2':
-                years_back = 2
-            elif period_choice == '3':
-                years_back = 3
-            elif period_choice == '4':
-                years_back = 5
-            elif period_choice == '5':
-                years_back = 10
-            else:  # カスタム期間
-                years_back = st.number_input(
-                    "何年前まで分析しますか? (小数点可):",
-                    min_value=0.1,
-                    max_value=50.0,
-                    value=2.0,
-                    step=0.1,
-                    key="custom_years"
-                )
-            
-            # 開始日を計算
-            days_back = int(years_back * 365.25)
-            start_date = datetime.strptime(end_date_str, '%Y-%m-%d') - timedelta(days=days_back)
-            start_date_str = start_date.strftime('%Y-%m-%d')
-            
-            st.info(f"✓ 計算された分析期間: {start_date_str} ～ {end_date_str} ({years_back}年間)")
-        
-        # 分析実行ボタン
-        if st.button("🚀 LPPLS分析を実行", type="primary", key="run_analysis"):
-            # セッション状態をリセット
-            st.session_state.analysis_completed = False
-            st.session_state.analysis_results = None
-            
-            # 分析実行
-            with st.spinner("分析を実行中..."):
-                run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_shortcuts, 
-                                 start_date_str, end_date_str, input_method, years_back)
-        
-        # 結果表示
-        if st.session_state.analysis_completed and st.session_state.analysis_results:
-            # 結果が既にセッション状態に保存されているので、
-            # ここでは何もしない（結果は既に表示されている）
-            pass
+    except Exception as exc:
+        msg = str(exc)
+        if "429" in msg or "too many" in msg.lower():
+            return None, "アクセス頻度が高すぎます。しばらく待ってから再試行してください。"
+        return None, f"データ取得エラー: {msg}"
 
-def run_lppls_analysis(ticker_symbol, ticker_input, ticker_input_lower, ticker_shortcuts, 
-                      start_date_str, end_date_str, input_method, years_back):
-    """LPPLS分析を実行"""
-    
-    # 出力コンテナ
-    output_container = st.container()
-    
-    with output_container:
-        # 分析開始の表示（元のスクリプトと同じ形式）
-        st.text("")
-        st.text("=" * 60)
-        st.text("Dragon King - LPPLS分析")
-        st.text("=" * 60)
-        
-        if ticker_input_lower in ticker_shortcuts:
-            st.text(f"対象銘柄: {ticker_symbol} (入力: {ticker_input})")
-        else:
-            st.text(f"対象銘柄: {ticker_symbol}")
-            
-        if input_method == "1":
-            st.text(f"分析期間: {start_date_str} ～ {end_date_str} (手動指定)")
-        else:
-            st.text(f"分析期間: {start_date_str} ～ {end_date_str} ({years_back}年間)")
-            
-        st.text("=" * 60)
-        st.text("データ取得中...")
-        
-        # データ取得
-        data, error = fetch_stock_data(ticker_symbol, start_date_str, end_date_str)
-        
-        if error:
-            st.error(error)
-            return
-            
-        if data is None or data.empty:
-            st.error(f"❌ ティッカーシンボル '{ticker_symbol}' のデータが取得できませんでした。")
-            return
-            
-        # タイムゾーン情報を削除
-        data['Date'] = pd.to_datetime(data['Date']).dt.tz_localize(None)
-        data = data.sort_values('Date')
-        
-        # データの基本情報を表示
-        actual_start = data['Date'].min().strftime('%Y-%m-%d')
-        actual_end = data['Date'].max().strftime('%Y-%m-%d')
-        data_points = len(data)
-        price_min = data['Adj Close'].min()
-        price_max = data['Adj Close'].max()
-        
-        st.text("✓ データ取得完了")
-        st.text(f"  実際の期間: {actual_start} ～ {actual_end}")
-        st.text(f"  データ数: {data_points:,} 件")
-        st.text(f"  価格範囲: ${price_min:.2f} - ${price_max:.2f}")
-        st.text("-" * 60)
-        
-        # LPPLS分析実行
-        st.text("LPPLS分析を開始します...")
-        
-        # 日付をordinal形式（数値）に変換
-        time = [pd.Timestamp.toordinal(date) for date in data['Date']]
-        
-        # 調整後終値をlog変換
-        price = np.log(data['Adj Close'].values)
-        
-        # LPPLSモデル用の観測データを作成
-        observations = np.array([time, price])
-        
-        # LPPLSモデルを初期化
-        lppls_model = lppls.LPPLS(observations=observations)
-        
-        # モデルをフィッティング
-        MAX_SEARCHES = 25
-        st.text(f"モデルフィッティング中... (最大試行回数: {MAX_SEARCHES})")
-        
-        with st.spinner("フィッティング実行中..."):
-            tc, m, w, a, b, c, c1, c2, O, D = lppls_model.fit(MAX_SEARCHES)
-        
-        # fit()の結果があるか確認
+
+# ──────────────────────────────────────────────
+# LPPLS 補助関数
+# ──────────────────────────────────────────────
+def _fig_to_st_image(fig, caption: str = "") -> None:
+    """matplotlib Figure を st.image() で表示する。"""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+    buf.seek(0)
+    st.image(buf, caption=caption, use_container_width=True)
+
+
+def _run_fit(lppls_model):
+    """フィッティングを実行し、結果タプルを返す。失敗時は None。"""
+    try:
+        result = lppls_model.fit(MAX_SEARCHES)
         if not lppls_model.coef_:
-            st.text("")
-            st.text("❌ LPPLSモデルで有効な解が得られませんでした。解析をスキップします。")
-            st.text("=" * 60)
-            return
-        
-        # 結果表示
-        st.text("✓ LPPLS分析完了")
-        st.text("")
-        st.text("=" * 60)
-        st.text("LPPLS分析結果")
-        st.text("=" * 60)
-        
-        if ticker_input_lower in ticker_shortcuts:
-            st.text(f"対象銘柄: {ticker_symbol} (入力: {ticker_input})")
-        else:
-            st.text(f"対象銘柄: {ticker_symbol}")
-            
-        if input_method == "1":
-            st.text(f"指定期間: {start_date_str} ～ {end_date_str} (手動指定)")
-        else:
-            st.text(f"指定期間: {start_date_str} ～ {end_date_str} ({years_back}年間)")
-            
-        st.text(f"分析期間: {actual_start} ～ {actual_end}")
-        st.text(f"データ数: {data_points:,} 件")
-        st.text("-" * 60)
-        
-        # パラメータ結果を表示
-        st.text("フィットパラメータ:")
-        tc_date = pd.Timestamp.fromordinal(int(tc)).strftime('%Y-%m-%d')
-        st.text(f"  臨界時点 (tc): {tc_date} ({tc:.2f})")
-        st.text(f"  指数パラメータ (m): {m:.6f}")
-        st.text(f"  角周波数 (w): {w:.6f}")
-        st.text(f"  線形係数 (a): {a:.6f}")
-        st.text(f"  非線形係数 (b): {b:.6f}")
-        st.text(f"  周期係数 (c): {c:.6f}")
-        st.text(f"  コサイン成分 (c1): {c1:.6f}")
-        st.text(f"  サイン成分 (c2): {c2:.6f}")
-        st.text(f"  残差平方和 (O): {O:.6f}")
-        st.text(f"  ダミアン指標 (D): {D:.6f}")
-        st.text("-" * 60)
-        
-        # 解釈を追加
-        st.text("解釈:")
-        if 0 < m < 1:
-            st.text("  ⚠️  指数パラメータ (m) がバブル領域 (0 < m < 1) にあります")
-        elif m >= 1:
-            st.text("  🔴 指数パラメータ (m) が強いバブル領域 (m >= 1) にあります")
-        else:
-            st.text("  ✅ 指数パラメータ (m) は正常範囲です")
-            
-        current_date = pd.Timestamp.now()
-        tc_timestamp = pd.Timestamp.fromordinal(int(tc))
-        days_to_tc = (tc_timestamp - current_date).days
-        
-        if days_to_tc > 0:
-            st.text(f"  📅 予測される臨界時点まで約 {days_to_tc} 日")
-        elif days_to_tc == 0:
-            st.text("  ⚡ 臨界時点は今日です")
-        else:
-            st.text(f"  📅 臨界時点は約 {abs(days_to_tc)} 日前でした")
-            
-        if D < 0.5:
-            st.text("  ✅ ダミアン指標が良好 (D < 0.5) - 高い信頼性")
-        elif D < 1.0:
-            st.text("  ⚠️  ダミアン指標が中程度 (0.5 <= D < 1.0)")
-        else:
-            st.text("  🔴 ダミアン指標が高い (D >= 1.0) - 注意が必要")
-        
-        st.text("=" * 60)
-        
-        # フィット結果をプロット
-        st.text("")
-        st.text("フィット結果をプロット中...")
-        
-        try:
-            # 全ての既存のfigureをクリア
-            plt.close('all')
-            
-            # 新しいFigureオブジェクトを明示的に作成
-            fig, ax = plt.subplots(figsize=(12, 8))
-            
-            # LPPLSのplot_fitを実行
-            lppls_model.plot_fit()
-            
-            # 現在のfigureの状態を確認
-            current_fig = plt.gcf()
-            
-            # LPPLSが作成したfigure（通常は最後のfigure）を使用
-            active_fig = current_fig if current_fig.axes else fig
-            
-            # タイトルを設定
-            plt.figure(active_fig.number)  # アクティブなfigureを選択
-            plt.title(f'{ticker_symbol} - LPPLS フィット結果 ({actual_start} ～ {actual_end})')
+            return None
+        return result
+    except Exception as exc:
+        st.error(f"フィッティングエラー: {exc}")
+        return None
+
+
+def _display_params(
+    ticker_symbol: str,
+    actual_start: str,
+    actual_end: str,
+    data_points: int,
+    fit_result: tuple,
+) -> None:
+    """フィットパラメータを Streamlit ネイティブコンポーネントで表示する。"""
+    tc, m, w, a, b, c, c1, c2, O, D = fit_result
+    tc_date = pd.Timestamp.fromordinal(int(tc)).strftime("%Y-%m-%d")
+
+    st.subheader("フィットパラメータ")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("臨界時点 tc", tc_date)
+    col2.metric("指数パラメータ m", f"{m:.4f}")
+    col3.metric("角周波数 w", f"{w:.4f}")
+    col4.metric("ダミアン指標 D", f"{D:.4f}")
+    col5.metric("残差平方和 O", f"{O:.4f}")
+
+    with st.expander("詳細パラメータ"):
+        params_df = pd.DataFrame(
+            {
+                "パラメータ": ["tc (ordinal)", "m", "w", "a", "b", "c", "c1", "c2", "O (残差)", "D (ダミアン)"],
+                "値": [f"{tc:.2f}", f"{m:.6f}", f"{w:.6f}", f"{a:.6f}",
+                       f"{b:.6f}", f"{c:.6f}", f"{c1:.6f}", f"{c2:.6f}",
+                       f"{O:.6f}", f"{D:.6f}"],
+                "説明": [
+                    "臨界時点（ordinal）", "指数パラメータ", "角周波数",
+                    "線形係数", "非線形係数", "周期係数",
+                    "コサイン成分", "サイン成分", "残差平方和", "ダミアン指標"
+                ],
+            }
+        )
+        st.dataframe(params_df, hide_index=True, use_container_width=True)
+
+    st.subheader("解釈")
+    if 0 < m < 1:
+        st.warning(f"⚠️ 指数パラメータ (m={m:.4f}) がバブル領域 (0 < m < 1) にあります。")
+    elif m >= 1:
+        st.error(f"🔴 指数パラメータ (m={m:.4f}) が強いバブル領域 (m ≥ 1) にあります。")
+    else:
+        st.success(f"✅ 指数パラメータ (m={m:.4f}) は正常範囲です。")
+
+    tc_timestamp = pd.Timestamp.fromordinal(int(tc))
+    days_to_tc = (tc_timestamp - pd.Timestamp.now()).days
+    if days_to_tc > 0:
+        st.info(f"📅 予測される臨界時点まで約 **{days_to_tc}** 日（{tc_date}）")
+    elif days_to_tc == 0:
+        st.error("⚡ 臨界時点は今日です。")
+    else:
+        st.info(f"📅 臨界時点は約 **{abs(days_to_tc)}** 日前でした（{tc_date}）")
+
+    if D < 0.5:
+        st.success(f"✅ ダミアン指標 (D={D:.4f}) が良好 < 0.5 — 高い信頼性")
+    elif D < 1.0:
+        st.warning(f"⚠️ ダミアン指標 (D={D:.4f}) が中程度 (0.5 ≤ D < 1.0)")
+    else:
+        st.error(f"🔴 ダミアン指標 (D={D:.4f}) が高い ≥ 1.0 — 注意が必要")
+
+
+def _plot_fit(lppls_model, ticker_display: str, actual_start: str, actual_end: str) -> None:
+    """フィット結果グラフを描画して st.image() で表示する。"""
+    try:
+        plt.close("all")
+        lppls_model.plot_fit()
+        fig = plt.gcf()
+        if fig.axes:
+            fig.suptitle(
+                f"{ticker_display} — LPPLS フィット結果  ({actual_start} ～ {actual_end})",
+                fontsize=13,
+            )
             plt.tight_layout()
-            
-            # フィット結果グラフを画像として表示
-            try:
-                import io
-                import base64
-                
-                # 高解像度で保存
-                buf = io.BytesIO()
-                active_fig.savefig(buf, format='png', dpi=200, 
-                                 bbox_inches='tight', facecolor='white',
-                                 edgecolor='none', transparent=False)
-                buf.seek(0)
-                
-                # Base64エンコードしてHTMLで表示
-                img_b64 = base64.b64encode(buf.getvalue()).decode()
-                st.markdown(f'<img src="data:image/png;base64,{img_b64}" style="width:100%">', 
-                           unsafe_allow_html=True)
-                
-            except Exception as display_error:
-                st.error(f"⚠️ グラフの表示でエラーが発生しました: {str(display_error)}")
-                # フォールバック: 従来のst.pyplot()を試行
-                try:
-                    st.pyplot(active_fig, clear_figure=False)
-                except Exception as fallback_error:
-                    st.error(f"⚠️ フォールバック表示も失敗しました: {str(fallback_error)}")
-            
-        except Exception as e:
-            st.error(f"⚠️ グラフの表示でエラーが発生しました: {str(e)}")
-        finally:
-            plt.close('all')  # 全てのfigureを確実に閉じる
-        
-        # 信頼指標を計算してプロット
-        st.text("")
-        st.text("信頼指標を計算中... (この処理には時間がかかる場合があります)")
-        
-        with st.spinner("信頼指標計算中..."):
-            try:
-                res = lppls_model.mp_compute_nested_fits(
-                    workers=4,  # Streamlitでは少なめに設定
-                    window_size=120,
-                    smallest_window_size=30,
-                    outer_increment=1,
-                    inner_increment=5,
-                    max_searches=MAX_SEARCHES,
-                )
-                
-                st.text("信頼指標をプロット中...")
-                
-                try:
-                    # 既存のfigureをクリア
-                    plt.close('all')
-                    
-                    # 信頼指標用の新しいfigureを作成
-                    fig2, ax2 = plt.subplots(figsize=(15, 10))
-                    
-                    # 信頼指標をプロット
-                    lppls_model.plot_confidence_indicators(res)
-                    
-                    # LPPLSが作成した実際のfigureを取得
-                    confidence_fig = plt.gcf()
-                    
-                    # タイトルを設定（実際のfigureに対して）
-                    plt.figure(confidence_fig.number)
-                    plt.suptitle(f'{ticker_symbol} - LPPLS 信頼指標 ({actual_start} ～ {actual_end})', y=0.98)
-                    plt.tight_layout()
-                    
-                    # 信頼指標グラフを画像として表示
-                    try:
-                        import io
-                        import base64
-                        
-                        buf2 = io.BytesIO()
-                        confidence_fig.savefig(buf2, format='png', dpi=200, 
-                                             bbox_inches='tight', facecolor='white',
-                                             edgecolor='none', transparent=False)
-                        buf2.seek(0)
-                        
-                        img_b64_2 = base64.b64encode(buf2.getvalue()).decode()
-                        st.markdown(f'<img src="data:image/png;base64,{img_b64_2}" style="width:100%">', 
-                                   unsafe_allow_html=True)
-                        
-                    except Exception as confidence_display_error:
-                        st.error(f"⚠️ 信頼指標グラフの表示でエラーが発生しました: {str(confidence_display_error)}")
-                        # フォールバック: 従来のst.pyplot()を試行
-                        try:
-                            st.pyplot(confidence_fig, clear_figure=False)
-                        except Exception as confidence_fallback_error:
-                            st.error(f"⚠️ 信頼指標フォールバック表示も失敗しました: {str(confidence_fallback_error)}")
-                    
-                except Exception as plot_error:
-                    st.error(f"⚠️ 信頼指標グラフの表示でエラーが発生しました: {str(plot_error)}")
-                finally:
-                    plt.close('all')  # 全てのfigureを確実に閉じる
-                
-            except Exception as e:
-                st.warning(f"⚠️ 信頼指標の計算でエラーが発生しました: {str(e)}")
-        
-        st.text("")
-        st.text("✅ 全ての分析が完了しました。")
-        st.text("=" * 60)
+            _fig_to_st_image(fig)
+        else:
+            st.warning("フィットグラフの生成に失敗しました。")
+    except Exception as exc:
+        st.error(f"フィットグラフ描画エラー: {exc}")
+    finally:
+        plt.close("all")
+
+
+def _plot_confidence(
+    lppls_model,
+    ticker_display: str,
+    actual_start: str,
+    actual_end: str,
+    max_searches: int,
+) -> None:
+    """信頼指標グラフを計算・描画して st.image() で表示する。"""
+    with st.spinner("信頼指標を計算中… (数十秒かかる場合があります)"):
+        try:
+            res = lppls_model.mp_compute_nested_fits(
+                workers=4,
+                window_size=120,
+                smallest_window_size=30,
+                outer_increment=1,
+                inner_increment=5,
+                max_searches=max_searches,
+            )
+        except Exception as exc:
+            st.warning(f"信頼指標の計算でエラーが発生しました: {exc}")
+            return
+
+    try:
+        plt.close("all")
+        lppls_model.plot_confidence_indicators(res)
+        fig = plt.gcf()
+        if fig.axes:
+            fig.suptitle(
+                f"{ticker_display} — LPPLS 信頼指標  ({actual_start} ～ {actual_end})",
+                fontsize=13,
+                y=1.01,
+            )
+            plt.tight_layout()
+            _fig_to_st_image(fig)
+        else:
+            st.warning("信頼指標グラフの生成に失敗しました。")
+    except Exception as exc:
+        st.error(f"信頼指標グラフ描画エラー: {exc}")
+    finally:
+        plt.close("all")
+
+
+# ──────────────────────────────────────────────
+# 分析メイン処理
+# ──────────────────────────────────────────────
+def run_lppls_analysis(
+    ticker_symbol: str,
+    ticker_display: str,
+    start_date_str: str,
+    end_date_str: str,
+    period_label: str,
+) -> None:
+    """LPPLS 分析を実行し、結果を Streamlit に描画する。"""
+
+    # ── データ取得 ──────────────────────────────
+    with st.spinner("データを取得中…"):
+        data, error = fetch_stock_data(ticker_symbol, start_date_str, end_date_str)
+
+    if error:
+        st.error(f"❌ {error}")
+        return
+    if data is None or data.empty:
+        st.error(f"❌ '{ticker_symbol}' のデータを取得できませんでした。")
+        return
+
+    actual_start = data["Date"].min().strftime("%Y-%m-%d")
+    actual_end = data["Date"].max().strftime("%Y-%m-%d")
+    data_points = len(data)
+
+    st.success(
+        f"✅ データ取得完了 — **{data_points:,}** 件  "
+        f"（{actual_start} ～ {actual_end}）"
+    )
+
+    # データプレビュー
+    preview_cols = [c for c in ["Date", "open", "high", "low", "close", "Adj Close", "volume"] if c in data.columns]
+    with st.expander("取得データのプレビュー（直近20件）"):
+        st.dataframe(data[preview_cols].tail(20), hide_index=True, use_container_width=True)
+
+    # ── LPPLS セットアップ ──────────────────────
+    time_ord = [pd.Timestamp.toordinal(d) for d in data["Date"]]
+    price_log = np.log(data["Adj Close"].values)
+    observations = np.array([time_ord, price_log])
+    lppls_model = lppls.LPPLS(observations=observations)
+
+    # ── フィッティング ──────────────────────────
+    st.subheader("モデルフィッティング")
+    with st.spinner(f"フィッティング実行中… (最大試行: {MAX_SEARCHES})"):
+        fit_result = _run_fit(lppls_model)
+
+    if fit_result is None:
+        st.error("❌ LPPLS モデルで有効な解が得られませんでした。")
+        st.info("💡 分析期間を変更するか、別のティッカーシンボルをお試しください。")
+        return
+
+    st.success("✅ フィッティング完了")
+
+    # ── パラメータ表示 ───────────────────────────
+    _display_params(ticker_symbol, actual_start, actual_end, data_points, fit_result)
+
+    # ── フィットグラフ ──────────────────────────
+    st.subheader("フィット結果グラフ")
+    _plot_fit(lppls_model, ticker_display, actual_start, actual_end)
+
+    # ── 信頼指標グラフ ──────────────────────────
+    st.subheader("信頼指標グラフ")
+    _plot_confidence(lppls_model, ticker_display, actual_start, actual_end, MAX_SEARCHES)
+
+    st.success("✅ すべての分析が完了しました。")
+
+
+# ──────────────────────────────────────────────
+# UI
+# ──────────────────────────────────────────────
+def main() -> None:
+    st.title("📈 Dragon King — LPPLS 分析ツール")
+    st.caption("Log-Periodic Power Law Singularity (LPPLS) モデルによるバブル・崩壊予測")
+
+    # ── ティッカー入力 ───────────────────────────
+    st.header("1. 銘柄選択")
+
+    with st.expander("省略入力ガイド"):
+        shortcut_df = pd.DataFrame(
+            [
+                {"省略キー": k, "ティッカー": v, "市場": SHORTCUT_LABELS[k]}
+                for k, v in TICKER_SHORTCUTS.items()
+            ]
+        )
+        st.dataframe(shortcut_df, hide_index=True, use_container_width=True)
+        st.caption("上記以外は AAPL、MSFT、7203.T など公式ティッカーを直接入力してください。")
+
+    ticker_input = st.text_input(
+        "ティッカーシンボル（例: nikkei / sp500 / AAPL）",
+        placeholder="nikkei",
+        key="ticker_input",
+    )
+
+    if not ticker_input:
+        st.info("ティッカーシンボルを入力してください。")
+        return
+
+    ticker_lower = ticker_input.lower()
+    if ticker_lower in TICKER_SHORTCUTS:
+        ticker_symbol = TICKER_SHORTCUTS[ticker_lower]
+        ticker_display = f"{ticker_symbol} ({SHORTCUT_LABELS[ticker_lower]})"
+        st.success(f"省略入力 → **{ticker_symbol}** ({SHORTCUT_LABELS[ticker_lower]})")
+    else:
+        ticker_symbol = ticker_input.upper()
+        ticker_display = ticker_symbol
+
+    # ── 分析期間 ─────────────────────────────────
+    st.header("2. 分析期間")
+
+    input_method = st.radio(
+        "入力方式",
+        options=["dates", "years"],
+        format_func=lambda x: "開始日と終了日を指定" if x == "dates" else "終了日から遡る年数を指定",
+        horizontal=True,
+        key="input_method",
+    )
+
+    start_date_str = None
+    end_date_str = None
+    period_label = ""
+
+    if input_method == "dates":
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input(
+                "開始日",
+                value=datetime.now() - timedelta(days=365),
+                key="start_date",
+            )
+        with col2:
+            end_date = st.date_input(
+                "終了日",
+                value=datetime.now(),
+                key="end_date",
+            )
+        start_date_str = start_date.strftime("%Y-%m-%d")
+        end_date_str = end_date.strftime("%Y-%m-%d")
+        period_label = "手動指定"
+
+    else:
+        end_date = st.date_input(
+            "終了日",
+            value=datetime.now(),
+            key="end_date_years",
+        )
+        end_date_str = end_date.strftime("%Y-%m-%d")
+
+        years_option = st.selectbox(
+            "遡る年数",
+            options=["1年", "2年", "3年", "5年", "10年", "カスタム"],
+            index=1,
+            key="years_back",
+        )
+
+        years_map = {"1年": 1, "2年": 2, "3年": 3, "5年": 5, "10年": 10}
+
+        if years_option == "カスタム":
+            years_back = st.number_input(
+                "年数（小数可）",
+                min_value=0.1,
+                max_value=50.0,
+                value=2.0,
+                step=0.1,
+                key="custom_years",
+            )
+        else:
+            years_back = years_map[years_option]
+
+        days_back = int(float(years_back) * 365.25)
+        start_date = datetime.strptime(end_date_str, "%Y-%m-%d") - timedelta(days=days_back)
+        start_date_str = start_date.strftime("%Y-%m-%d")
+        period_label = f"{years_back}年間"
+        st.info(f"分析期間: **{start_date_str}** ～ **{end_date_str}** ({period_label})")
+
+    # 日付バリデーション
+    if start_date_str and end_date_str and start_date_str >= end_date_str:
+        st.error("開始日は終了日より前に設定してください。")
+        return
+
+    # ── 実行ボタン ───────────────────────────────
+    st.header("3. 分析実行")
+    st.markdown(
+        f"**銘柄:** {ticker_display}　　**期間:** {start_date_str} ～ {end_date_str}　　**方式:** {period_label}"
+    )
+
+    if st.button("🚀 LPPLS 分析を実行", type="primary", key="run_btn"):
+        st.divider()
+        run_lppls_analysis(
+            ticker_symbol=ticker_symbol,
+            ticker_display=ticker_display,
+            start_date_str=start_date_str,
+            end_date_str=end_date_str,
+            period_label=period_label,
+        )
+
 
 if __name__ == "__main__":
     main()
